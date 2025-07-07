@@ -30,6 +30,8 @@ router.register(r'contacts', ContactViewSet)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    path('api/auth/', include('authentication.urls')),
+
 #path('api/auth/passkeys/', include(('passkeys.urls','passkeys'), namespace='passkeys')),
      path('api/call/', make_call),
     path('api/calls/', call_logs),
@@ -38,8 +40,8 @@ urlpatterns = [
     path('api/incoming/', incoming_call),
     path('api/ge/', get_twilio_token),
     path('api/voice/', outbound_call_twiml),
-    #path('api/auth/', include('authentication.urls')),
-    #path("api/passkeys/", include("passkeys.urls")),  # WebAuthn endpoints
-   # path("api/token/", include("rest_framework_simplejwt.urls")),
+     path('api/auth/passkeys/', include(('passkeys.urls', 'passkeys'), namespace='passkeys')),
+
+
 ]
 

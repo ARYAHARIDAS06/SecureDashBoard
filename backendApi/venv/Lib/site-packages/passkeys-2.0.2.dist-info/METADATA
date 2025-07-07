@@ -1,0 +1,231 @@
+Metadata-Version: 2.4
+Name: passkeys
+Version: 2.0.2
+Summary: Corbado SDK
+Home-page: https://github.com/corbado/corbado-python
+Author: Corbado team
+Author-email: support@corbado.com
+Keywords: Corbado,Corbado Python SDK
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: urllib3>=1.25.3
+Requires-Dist: python-dateutil
+Requires-Dist: pydantic>=2
+Requires-Dist: typing-extensions>=4.7.1
+Requires-Dist: pyopenssl
+Requires-Dist: PyJWT
+Provides-Extra: test
+Requires-Dist: pytest~=7.1.3; extra == "test"
+Requires-Dist: pytest-cov>=2.8.1; extra == "test"
+Requires-Dist: pytest-randomly>=3.12.0; extra == "test"
+Provides-Extra: flake8
+Requires-Dist: flake8>=7.0.0; extra == "flake8"
+Requires-Dist: pep8-naming; extra == "flake8"
+Requires-Dist: flake8-builtins; extra == "flake8"
+Requires-Dist: flake8-bugbear; extra == "flake8"
+Requires-Dist: flake8-isort; extra == "flake8"
+Requires-Dist: darglint; extra == "flake8"
+Requires-Dist: flake8-bandit; extra == "flake8"
+Requires-Dist: flake8-return; extra == "flake8"
+Requires-Dist: flake8-docstrings>=1.7.0; extra == "flake8"
+Provides-Extra: mypy
+Requires-Dist: mypy; extra == "mypy"
+Provides-Extra: tox-gh
+Requires-Dist: tox-gh-actions; extra == "tox-gh"
+Provides-Extra: tox
+Requires-Dist: tox>=4.0.0; extra == "tox"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary
+
+<img width="1070" alt="GitHub Repo Cover" src="https://github.com/corbado/corbado-php/assets/18458907/aa4f9df6-980b-4b24-bb2f-d71c0f480971">
+
+# Corbado Python SDK
+
+[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+[![documentation](https://img.shields.io/badge/documentation-Corbado_Backend_API_Reference-blue.svg)](https://apireference.cloud.corbado.io/backendapi/)
+[![Slack](https://img.shields.io/badge/slack-join%20chat-brightgreen.svg)](https://join.slack.com/t/corbado/shared_invite/zt-1b7867yz8-V~Xr~ngmSGbt7IA~g16ZsQ)
+
+The [Corbado](https://www.corbado.com) Python SDK provides convenient access to the [Corbado Backend API](https://apireference.cloud.corbado.io/backendapi-v2/) from applications written in the Python language.
+
+[![integration-guides](https://github.com/user-attachments/assets/7859201b-a345-4b68-b336-6e2edcc6577b)](https://app.corbado.com/getting-started?search=python)
+
+:warning: The Corbado Python SDK is commonly referred to as a private client, specifically designed for usage within closed backend applications. This particular SDK should exclusively be utilized in such environments, as it is crucial to ensure that the API secret remains strictly confidential and is never shared.
+
+:rocket: [Getting started](#rocket-getting-started) | :hammer_and_wrench: [Services](#hammer_and_wrench-services) | :books: [Advanced](#books-advanced) | :speech_balloon: [Support & Feedback](#speech_balloon-support--feedback)
+
+## :rocket: Getting started
+
+### Requirements
+
+- Python 3.8 or later
+
+### Installation
+
+Use the following command to install the Corbado Python SDK:
+
+```bash
+pip install passkeys
+```
+
+### Usage
+
+To create a Corbado Python SDK instance you need to provide your `Project ID` and `API secret` which can be found at the [Developer Panel](https://app.corbado.com).
+
+```Python
+config: Config = Config(project_id="{project_id}", api_secret="{api_secret}")
+sdk = CorbadoSDK(config=config)
+```
+
+### See in action
+
+- Check [Python Django](https://github.com/corbado/passkeys-python-django) example
+- Check [Python Flask](https://github.com/corbado/passkeys-python-flask) example
+- Check [Python FastAPI](https://github.com/corbado/passkeys-svelte-fastapi) example
+- Check integration tests [here](tests/integration)
+
+## :hammer_and_wrench: Services
+
+The Corbado Python SDK provides the following services:
+
+- `sessions` for managing sessions ([example flask app](https://github.com/corbado/example-passkeys-python-flask))
+- `users` for managing users ([examples](tests/integration/test_identifier_service.py))
+- `identifiers` for managing login identifiers ([examples](tests/integration/test_user_service.py))
+
+To use a specific service, such as `users`, invoke it as shown below:
+
+```Python
+user_service: UserService = sdk.users
+``` 
+
+## :books: Advanced
+
+### Error handling
+
+The Corbado Python SDK raises exceptions for all errors. The following exceptions are thrown:
+
+- `ValidationError` for failed validations (client side)
+- `ServerException` for server errors (server side)
+- `TokenValidationException` for errors in session service (client side)
+- `StandardException` for everything else (client side)
+
+`SessionService` returns a `UserEntity` as a result of token validation. If the token is invalid for any reason,
+a `TokenValidationException` is thrown. It provides detailed information on the error.
+If no error, is thrown, the `session_token` is valid and you can use the `UserEntity` object.
+
+```Python
+try:
+  user: UserEntity = sdk.sessions.validate_token(session_token)
+except TokenValidationException:
+  # handle error..
+  pass
+```
+
+If the Backend API returns a HTTP status code other than 200, the Corbado Python SDK throws a `ServerException`. The `ServerException`class provides convenient methods to access all important data:
+  sdk.users.get(user_id="usr-123456789")
+
+```Python
+        try:
+            # Try to get non-existing user with ID 'usr-123456789'
+            sdk.users.get(user_id="usr-123456789")
+        except ServerException as e:
+            # Show HTTP status code (404 in this case)
+            print(f"Status Code: {e.http_status_code}")
+
+            # Show request ID (can be used in developer panel to look up the full request
+            # and response, see https://app.corbado.com/app/logs/requests)
+            print(f"Request id: {e.request_id}")
+
+            # Show full request data
+            print(f"Request data: {e.request_data}")
+
+            # Show runtime of request in seconds (server side)
+            print(f"Runtime: {e.runtime}")
+
+            # Show error type (not_found)
+            print(f"Error type: {e.error_type}")
+
+            # Show full error data
+            print(f"Full error: {e.error}")
+
+```
+## Developer Setup
+
+Create a virtual environment and install packages -
+``` console
+python3 -m venv venv_name
+source venv_name/bin/activate
+pip install -r requirements-dev.txt
+```
+(Add venv_name to "exclude" list in .flake8, otherwise flake8 will lint the generated venv)
+
+Add environment variables for tests (use the test project from secrets repositoty) -
+``` console
+export CORBADO_API_SECRET=corbado1_123456
+export CORBADO_PROJECT_ID=pro-123456
+export CORBADO_BACKEND_API="https://backendapi.cloud.corbado.io"
+```
+
+# Testing
+
+Run all tests using -
+
+``` console
+tox run -e py38
+```
+
+The tox tests are configured to run on Python  3.8, 3.9, 3.10, 3.11, 3.12 (you need to remove "-e py38" tox argument)
+
+Run linting and mypy:
+``` console
+mypy -p corbado_python_sdk --exclude generated --strict --disable-error-code attr-defined
+flake8 .
+```
+
+# Development notes
+
+Use Version file as single source of truth for version control.
+
+Use VSCode with provided project/extentions configuration .vscode/settings.json
+
+Use the recommended extentions from .vscode/extentions.json and explore their functionality to achieve expected code quality by integration tests:
+
+
+
+## :speech_balloon: Support & Feedback
+
+### Report an issue
+
+If you encounter any bugs or have suggestions, please [open an issue](https://github.com/corbado/corbado-python/issues/new).
+
+### Slack channel
+
+Join our Slack channel to discuss questions or ideas with the Corbado team and other developers.
+
+[![Slack](https://img.shields.io/badge/slack-join%20chat-brightgreen.svg)](https://bit.ly/passkeys-community)
+
+### Email
+
+You can also reach out to us via email at vincent.delitz@corbado.com.
+
+### Vulnerability reporting
+
+Please report suspected security vulnerabilities in private to security@corbado.com. Please do NOT create publicly viewable issues for suspected security vulnerabilities.
