@@ -32,7 +32,8 @@ INSTALLED_APPS = [
     # Third-party apps
     'rest_framework',
     'corsheaders',
-   'authentication','passkeys'
+   'authentication','passkeys',
+   'rest_framework.authtoken'
 ]
 
 MIDDLEWARE = [
@@ -77,14 +78,18 @@ WSGI_APPLICATION = 'backendApi.wsgi.application'
 
 
 # WebAuthn Configuration
-WEBAUTHN_RP_ID = 'ngrok http http://localhost:8080'  # Change to your domain in production
+WEBAUTHN_RP_ID = 'localhost'  # Change to your domain in production
 WEBAUTHN_RP_NAME = 'Secure DashBoard'
-WEBAUTHN_ORIGIN = 'http://localhost:8000'  # Change to your origin in production
+WEBAUTHN_ORIGIN = 'http://localhost:5173'  # Change to your origin in production
 # Database
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'SecureDashBoard',
+        'USER': 'postgres',
+        'PASSWORD': '1234',
+        'HOST': 'localhost',
+         'PORT': '5434'
     }
 }
 
@@ -107,7 +112,7 @@ STATIC_URL = 'static/'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-#AUTH_USER_MODEL = 'authentication.User'
+AUTH_USER_MODEL = 'authentication.User'
 # CORS settings for React frontend
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5174", 
@@ -115,10 +120,14 @@ CORS_ALLOWED_ORIGINS = [
     "https://54ea-103-154-37-6.ngrok-free.app",  # Optional ngrok
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+
+
+
 # Security settings for production
-SECURE_SSL_REDIRECT = False  # Set to True in production with HTTPS
-SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
-CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+# SECURE_SSL_REDIRECT = False  # Set to True in production with HTTPS
+# SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+# CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
 
 
 # # WebAuthn (passkey) config

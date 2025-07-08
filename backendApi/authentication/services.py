@@ -1,229 +1,199 @@
 import base64
-import json
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
-
-from webauthn import generate_registration_options, verify_registration_response
-from webauthn import generate_authentication_options, verify_authentication_response
+from datetime import timedelta
+from django.conf import settings
+import json  
+from django.utils import timezone
+from webauthn import (
+    generate_registration_options,
+    verify_registration_response,
+    generate_authentication_options,
+    verify_authentication_response,
+)
 from webauthn.helpers.structs import (
     AuthenticatorSelectionCriteria,
     UserVerificationRequirement,
     RegistrationCredential,
     AuthenticationCredential,
 )
-from webauthn.helpers.cose import COSEAlgorithmIdentifier
-from django.conf import settings
-from django.utils import timezone
-
-from .models import User, WebAuthnCredential, WebAuthnChallenge
+from .models import WebAuthnCredential, WebAuthnChallenge
 
 class WebAuthnService:
-    """Service class for WebAuthn operations"""
-    
     def __init__(self):
         self.rp_id = settings.WEBAUTHN_RP_ID
         self.rp_name = settings.WEBAUTHN_RP_NAME
         self.origin = settings.WEBAUTHN_ORIGIN
-    
-    def generate_registration_options(self, user: User) -> Dict[str, Any]:
-        """Generate options for WebAuthn registration"""
+
+    def _store_challenge(self, user, challenge: bytes, challenge_type: str):
+        return WebAuthnChallenge.objects.create(
+            user=user,
+            challenge=base64.urlsafe_b64encode(challenge).decode('ascii').rstrip('='),
+            challenge_type=challenge_type,
+            expires_at=timezone.now() + timedelta(minutes=5)
+        )
+
+    def _get_current_challenge(self, user, challenge_type: str):
+        challenge_obj = WebAuthnChallenge.objects.filter(
+            user=user,
+            challenge_type=challenge_type,
+            expires_at__gt=timezone.now()
+        ).first()
         
-        # Get existing credentials to exclude them
-        existing_credentials = [
-            {"id": cred.credential_id, "type": "public-key"}
-            for cred in user.webauthn_credentials.all()
-        ]
-        
+        if not challenge_obj:
+            return None
+            
+        # Padding fix for base64 decoding
+        padding = '=' * (-len(challenge_obj.challenge) % 4)
+        return base64.urlsafe_b64decode(challenge_obj.challenge + padding)
+
+    def generate_registration_options(self, user):
+        user_id_bytes = str(user.id).encode("utf-8")
+
         options = generate_registration_options(
             rp_id=self.rp_id,
             rp_name=self.rp_name,
-            user_id=str(user.id).encode(),
+            user_id=user_id_bytes,
             user_name=user.email,
             user_display_name=user.get_full_name() or user.email,
-            exclude_credentials=existing_credentials,
             authenticator_selection=AuthenticatorSelectionCriteria(
-                user_verification=UserVerificationRequirement.PREFERRED,
-            ),
-            supported_pub_key_algs=[
-                COSEAlgorithmIdentifier.ECDSA_SHA_256,
-                COSEAlgorithmIdentifier.RSASSA_PKCS1_v1_5_SHA_256,
-            ],
+                authenticator_attachment="platform",
+                user_verification=UserVerificationRequirement.REQUIRED
+            )
         )
-        
-        # Store challenge
-        challenge = WebAuthnChallenge.objects.create(
-            user=user,
-            challenge=base64.urlsafe_b64encode(options.challenge).decode(),
-            expires_at=timezone.now() + timedelta(minutes=5),
-            challenge_type='registration'
-        )
+
+        self._store_challenge(user, options.challenge, "registration")
         
         return {
-            "challenge": base64.urlsafe_b64encode(options.challenge).decode(),
-            "rp": {"id": options.rp.id, "name": options.rp.name},
+            "rp": {"id": self.rp_id, "name": self.rp_name},
             "user": {
-                "id": base64.urlsafe_b64encode(options.user.id).decode(),
-                "name": options.user.name,
-                "displayName": options.user.display_name,
+                "id": base64.urlsafe_b64encode(user_id_bytes).decode("utf-8").rstrip("="),
+                "name": user.email,
+                "displayName": user.get_full_name() or user.email
             },
+            "challenge": base64.urlsafe_b64encode(options.challenge).decode('ascii').rstrip('='),
             "pubKeyCredParams": [
-                {"alg": param.alg, "type": param.type} for param in options.pub_key_cred_params
+                {"type": "public-key", "alg": -7},
+                {"type": "public-key", "alg": -257}
             ],
             "authenticatorSelection": {
-                "userVerification": options.authenticator_selection.user_verification,
+                "authenticatorAttachment": "platform",
+                "userVerification": "required"
             },
-            "timeout": options.timeout,
-            "excludeCredentials": [
-                {
-                    "id": base64.urlsafe_b64encode(cred.id).decode(),
-                    "type": cred.type,
-                }
-                for cred in options.exclude_credentials
-            ],
+            "timeout": 60000,
+            "attestation": "none"
         }
-    
-    def verify_registration_response(self, user: User, credential_json: str) -> bool:
-        """Verify WebAuthn registration response"""
-        
+
+    def verify_registration_response(self, request, user, credential: dict):
         try:
-            credential_data = json.loads(credential_json)
-            
-            # Get the challenge
-            challenge_record = WebAuthnChallenge.objects.filter(
-                user=user,
-                challenge_type='registration',
-                expires_at__gt=timezone.now()
-            ).first()
-            
-            if not challenge_record:
+            challenge = self._get_current_challenge(user, "registration")
+            if not challenge:
+                print("No valid registration challenge found")
                 return False
-            
-            challenge = base64.urlsafe_b64decode(challenge_record.challenge)
-            
-            # Create RegistrationCredential object
-            credential = RegistrationCredential.parse_raw(credential_json)
-            
-            # Verify the registration
+
             verification = verify_registration_response(
-                credential=credential,
+                credential=RegistrationCredential.parse_raw(json.dumps({
+                    'id': credential['id'],
+                    'rawId': credential['rawId'],
+                    'response': {
+                        'attestationObject': credential['response']['attestationObject'],
+                        'clientDataJSON': credential['response']['clientDataJSON']
+                    },
+                    'type': credential['type']
+                })),
                 expected_challenge=challenge,
                 expected_origin=self.origin,
                 expected_rp_id=self.rp_id,
+                require_user_verification=True
             )
-            
+
             if verification.verified:
-                # Save the credential
                 WebAuthnCredential.objects.create(
                     user=user,
-                    credential_id=base64.urlsafe_b64encode(verification.credential_id).decode(),
-                    public_key=base64.urlsafe_b64encode(verification.credential_public_key).decode(),
+                    credential_id=credential['id'],
+                    public_key=base64.urlsafe_b64encode(verification.credential_public_key).decode('ascii').rstrip('='),
                     sign_count=verification.sign_count,
-                    device_name=credential_data.get('deviceName', 'Unknown Device')
+                    device_name="Primary Device"
                 )
-                
-                # Clean up the challenge
-                challenge_record.delete()
-                
+                WebAuthnChallenge.objects.filter(
+                    user=user,
+                    challenge_type="registration"
+                ).delete()
                 return True
-            
+
             return False
-            
         except Exception as e:
-            print(f"Registration verification error: {e}")
+            print(f"Registration verification failed: {str(e)}")
             return False
-    
-    def generate_authentication_options(self, user: Optional[User] = None) -> Dict[str, Any]:
-        """Generate options for WebAuthn authentication"""
-        
-        # Get allowed credentials
-        allowed_credentials = []
-        if user:
-            allowed_credentials = [
-                {"id": cred.credential_id, "type": "public-key"}
-                for cred in user.webauthn_credentials.all()
-            ]
-        
+
+    def generate_authentication_options(self, user):
+        credentials = [
+            {"id": cred.credential_id, "type": "public-key"}
+            for cred in user.webauthn_credentials.all()
+        ]
+
         options = generate_authentication_options(
             rp_id=self.rp_id,
-            allow_credentials=allowed_credentials,
-            user_verification=UserVerificationRequirement.PREFERRED,
+            allow_credentials=credentials,
+            user_verification=UserVerificationRequirement.REQUIRED
         )
-        
-        # Store challenge
-        challenge = WebAuthnChallenge.objects.create(
-            user=user,
-            challenge=base64.urlsafe_b64encode(options.challenge).decode(),
-            expires_at=timezone.now() + timedelta(minutes=5),
-            challenge_type='authentication'
-        )
+
+        self._store_challenge(user, options.challenge, "authentication")
         
         return {
-            "challenge": base64.urlsafe_b64encode(options.challenge).decode(),
-            "timeout": options.timeout,
-            "rpId": options.rp_id,
-            "allowCredentials": [
-                {
-                    "id": base64.urlsafe_b64encode(cred.id).decode(),
-                    "type": cred.type,
-                }
-                for cred in options.allow_credentials
-            ],
-            "userVerification": options.user_verification,
+            "challenge": base64.urlsafe_b64encode(options.challenge).decode('ascii').rstrip('='),
+            "rpId": self.rp_id,
+            "allowCredentials": credentials,
+            "userVerification": "required",
+            "timeout": 60000
         }
-    
-    def verify_authentication_response(self, credential_json: str) -> Optional[User]:
-        """Verify WebAuthn authentication response"""
-        
+
+    def verify_authentication_response(self, request, credential: dict):
         try:
-            credential_data = json.loads(credential_json)
+            stored_cred = WebAuthnCredential.objects.filter(
+                credential_id=credential['id']
+            ).select_related('user').first()
             
-            # Create AuthenticationCredential object
-            credential = AuthenticationCredential.parse_raw(credential_json)
-            
-            # Find the credential in database
-            credential_id = base64.urlsafe_b64encode(credential.raw_id).decode()
-            webauthn_credential = WebAuthnCredential.objects.filter(
-                credential_id=credential_id
-            ).first()
-            
-            if not webauthn_credential:
+            if not stored_cred:
+                print(f"Credential not found: {credential['id']}")
                 return None
-            
-            # Get the challenge
-            challenge_record = WebAuthnChallenge.objects.filter(
-                user=webauthn_credential.user,
-                challenge_type='authentication',
-                expires_at__gt=timezone.now()
-            ).first()
-            
-            if not challenge_record:
+
+            challenge = self._get_current_challenge(stored_cred.user, "authentication")
+            if not challenge:
+                print("No valid authentication challenge found")
                 return None
-            
-            challenge = base64.urlsafe_b64decode(challenge_record.challenge)
-            
-            # Verify the authentication
+
             verification = verify_authentication_response(
-                credential=credential,
+                credential=AuthenticationCredential.parse_raw(json.dumps({
+                    'id': credential['id'],
+                    'rawId': credential['rawId'],
+                    'response': {
+                        'authenticatorData': credential['response']['authenticatorData'],
+                        'clientDataJSON': credential['response']['clientDataJSON'],
+                        'signature': credential['response']['signature'],
+                        'userHandle': credential['response'].get('userHandle')
+                    },
+                    'type': credential['type']
+                })),
                 expected_challenge=challenge,
                 expected_origin=self.origin,
                 expected_rp_id=self.rp_id,
-                credential_public_key=base64.urlsafe_b64decode(webauthn_credential.public_key),
-                credential_current_sign_count=webauthn_credential.sign_count,
+                credential_public_key=base64.urlsafe_b64decode(stored_cred.public_key + '==='),
+                credential_current_sign_count=stored_cred.sign_count,
+                require_user_verification=True
             )
-            
+
             if verification.verified:
-                # Update credential sign count and last used
-                webauthn_credential.sign_count = verification.new_sign_count
-                webauthn_credential.last_used = timezone.now()
-                webauthn_credential.save()
-                
-                # Clean up the challenge
-                challenge_record.delete()
-                
-                return webauthn_credential.user
-            
+                stored_cred.sign_count = verification.new_sign_count
+                stored_cred.last_used = timezone.now()
+                stored_cred.save()
+
+                WebAuthnChallenge.objects.filter(
+                    user=stored_cred.user,
+                    challenge_type="authentication"
+                ).delete()
+
+                return stored_cred.user
+
             return None
-            
         except Exception as e:
-            print(f"Authentication verification error: {e}")
+            print(f"Authentication verification failed: {str(e)}")
             return None

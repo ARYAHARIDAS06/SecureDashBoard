@@ -1,142 +1,110 @@
-// // WebAuthn utility functions
-// export const isWebAuthnSupported = (): boolean => {
-//   return !!(navigator.credentials && navigator.credentials.create);
-// };
+// WebAuthn Utility Functions
+export const isWebAuthnSupported = (): boolean => {
+  return !!(window.PublicKeyCredential && 
+           navigator.credentials && 
+           navigator.credentials.create);
+};
 
-// export const bufferToBase64 = (buffer: ArrayBuffer): string => {
-//   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
-// };
+// URL-safe Base64 conversion
+export const bufferToBase64URL = (buffer: ArrayBuffer): string => {
+  const bytes = new Uint8Array(buffer);
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+};
 
-// export const base64ToBuffer = (base64: string): ArrayBuffer => {
-//   const binaryString = atob(base64);
-//   const bytes = new Uint8Array(binaryString.length);
-//   for (let i = 0; i < binaryString.length; i++) {
-//     bytes[i] = binaryString.charCodeAt(i);
-//   }
-//   return bytes.buffer;
-// };
+export const base64URLToBuffer = (base64URL: string): ArrayBuffer => {
+  const padding = '='.repeat((4 - (base64URL.length % 4)) % 4);
+  const base64 = (base64URL + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  
+  return bytes.buffer;
+};
 
-// export const generateChallenge = (): ArrayBuffer => {
-//   return crypto.getRandomValues(new Uint8Array(32));
-// };
+// WebAuthn Operations
+export async function createCredential(optionsFromServer: any): Promise<any> {
+  try {
+    const options = {
+      ...optionsFromServer,
+      challenge: base64URLToBuffer(optionsFromServer.challenge),
+      user: {
+        ...optionsFromServer.user,
+        id: base64URLToBuffer(optionsFromServer.user.id)
+      },
+      excludeCredentials: optionsFromServer.excludeCredentials?.map((cred: any) => ({
+        ...cred,
+        id: base64URLToBuffer(cred.id)
+      })) || []
+    };
 
-// export const createCredential = async (
-//   email: string,
-//   name: string,
-//   challenge: ArrayBuffer
-// ): Promise<PublicKeyCredential> => {
-//   const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
-//     rp: {
-//       name: 'Secure Dashboard',
-//       id: window.location.hostname,
-//     },
-//     user: {
-//       id: new TextEncoder().encode(email),
-//       name: email,
-//       displayName: name,
-//     },
-//     challenge,
-//     pubKeyCredParams: [
-//       {
-//         type: 'public-key',
-//         alg: -7, // ES256
-//       },
-//       {
-//         type: 'public-key',
-//         alg: -257, // RS256
-//       },
-//     ],
-//     timeout: 60000,
-//     authenticatorSelection: {
-//       authenticatorAttachment: 'platform',
-//       userVerification: 'required',
-//     },
-//   };
+    const credential = await navigator.credentials.create({
+      publicKey: options
+    });
 
-//   const credential = await navigator.credentials.create({
-//     publicKey: publicKeyCredentialCreationOptions,
-//   });
-
-//   if (!credential) {
-//     throw new Error('Failed to create credential');
-//   }
-
-//   return credential as PublicKeyCredential;
-// };
-
-// export const getAssertion = async (
-//   challenge: ArrayBuffer,
-//   credentialId?: string
-// ): Promise<PublicKeyCredential> => {
-//   const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
-//     challenge,
-//     allowCredentials: credentialId ? [
-//       {
-//         id: base64ToBuffer(credentialId),
-//         type: 'public-key',
-//       },
-//     ] : [],
-//     timeout: 60000,
-//     userVerification: 'required',
-//   };
-
-//   const assertion = await navigator.credentials.get({
-//     publicKey: publicKeyCredentialRequestOptions,
-//   });
-
-//   if (!assertion) {
-//     throw new Error('Failed to get assertion');
-//   }
-
-//   return as
-// sertion as PublicKeyCredential;
-// };
-
-
-export async function createCredential(optionsFromServer: any) {
-  const options = {
-    ...optionsFromServer,
-    challenge: base64ToBuffer(optionsFromServer.challenge),
-    user: {
-      ...optionsFromServer.user,
-      id: base64ToBuffer(optionsFromServer.user.id)
+    if (!credential) {
+      throw new Error('Credential creation failed');
     }
-  };
-  const cred = await navigator.credentials.create({ publicKey: options });
-  return credentialToJSON(cred);
+
+    return credentialToJSON(credential);
+  } catch (error) {
+    console.error('Create credential error:', error);
+    throw new Error(`WebAuthn registration failed: ${error.message}`);
+  }
 }
 
-export async function getAssertion(optionsFromServer: any) {
-  const options = {
-    ...optionsFromServer,
-    challenge: base64ToBuffer(optionsFromServer.challenge),
-    allowCredentials: optionsFromServer.allowCredentials.map((cred: any) => ({
-      ...cred,
-      id: base64ToBuffer(cred.id)
-    }))
-  };
-  const assertion = await navigator.credentials.get({ publicKey: options });
-  return credentialToJSON(assertion);
+export async function getAssertion(optionsFromServer: any): Promise<any> {
+  try {
+    const options = {
+      ...optionsFromServer,
+      challenge: base64URLToBuffer(optionsFromServer.challenge),
+      allowCredentials: optionsFromServer.allowCredentials?.map((cred: any) => ({
+        ...cred,
+        id: base64URLToBuffer(cred.id)
+      })) || []
+    };
+
+    const assertion = await navigator.credentials.get({
+      publicKey: options
+    });
+
+    if (!assertion) {
+      throw new Error('Assertion failed');
+    }
+
+    return credentialToJSON(assertion);
+  } catch (error) {
+    console.error('Get assertion error:', error);
+    throw new Error(`WebAuthn authentication failed: ${error.message}`);
+  }
 }
 
-export const bufferToBase64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-export const base64ToBuffer = (b64: string) => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-
-function credentialToJSON(cred: any) {
+function credentialToJSON(cred: PublicKeyCredential): any {
   if (!cred) return null;
-  const obj: any = {
-    id: cred.id,
-    type: cred.type,
-    rawId: bufferToBase64(cred.rawId)
-  };
+
+  const response: any = {};
   if (cred.response) {
-    obj.response = {};
-    for (let key in cred.response) {
-      const val = cred.response[key];
-      if (val instanceof ArrayBuffer) {
-        obj.response[key] = bufferToBase64(val);
+    for (const [key, value] of Object.entries(cred.response)) {
+      if (value instanceof ArrayBuffer) {
+        response[key] = bufferToBase64URL(value);
+      } else {
+        response[key] = value;
       }
     }
   }
-  return obj;
+
+  return {
+    id: cred.id,
+    type: cred.type,
+    rawId: bufferToBase64URL(cred.rawId),
+    response
+  };
 }

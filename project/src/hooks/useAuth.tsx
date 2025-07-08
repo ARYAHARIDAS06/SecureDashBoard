@@ -1,71 +1,59 @@
-// import React, { useState, useEffect, createContext, useContext } from 'react';
-// import { AuthenticatedUser } from '../types';
-
-// interface AuthContextType {
-//   user: AuthenticatedUser | null;
-//   login: (user: AuthenticatedUser) => void;
-//   logout: () => void;
-//   isLoading: boolean;
-// }
-
-// export const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// export const useAuth = () => {
-//   const context = useContext(AuthContext);
-//   if (!context) throw new Error('useAuth must be used within an AuthProvider');
-//   return context;
-// };
-
-// export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-//   const [user, setUser] = useState<AuthenticatedUser | null>(null);
-//   const [isLoading, setIsLoading] = useState(true);
-
-//   useEffect(() => {
-//     const stored = localStorage.getItem('user');
-//     if (stored) {
-//       try {
-//         setUser(JSON.parse(stored));
-//       } catch {
-//         localStorage.removeItem('user');
-//       }
-//     }
-//     setIsLoading(false);
-//   }, []);
-
-//   const login = (u: AuthenticatedUser) => {
-//     setUser(u);
-//     localStorage.setItem('user', JSON.stringify(u));
-//   };
-
-//   const logout = () => {
-//     setUser(null);
-//     localStorage.removeItem('user');
-//   };
-
-//   return (
-//     <AuthContext.Provider value={{ user, login, logout, isLoading }}>
-//       {children}
-//     </AuthContext.Provider>
-//   );
-// };
-// File: src/hooks/useAuth.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
 
-const AuthContext = createContext<any>(null);
+type AuthContextType = {
+  user: any;
+  isLoading: boolean;
+  login: (user: any) => void;
+  logout: () => void;
+};
 
-export const AuthProvider = ({ children }: any) => {
-  const [user, setUser] = useState(null);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  isLoading: true,
+  login: () => {},
+  logout: () => {},
+});
+
+export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+  const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(false);
+    const checkAuth = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const response = await axios.get('http://localhost:8000/api/auth/user/', {
+            headers: {
+              Authorization: `Token ${token}`
+            }
+          });
+          setUser(response.data);
+        }
+      } catch (error) {
+        console.error("Auth check failed:", error);
+        localStorage.removeItem('token');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    checkAuth();
   }, []);
 
-  const login = (user: any) => setUser(user);
-  const logout = () => setUser(null);
+  const login = (userData: any) => {
+    setUser(userData);
+    localStorage.setItem('token', userData.token);
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('token');
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
