@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 
+#!/usr/bin/env bash
 set -o errexit
+
+
+cd backend
 pip install -r requirements.txt
 
-echo "🧱 Running Django migrations..."
-python backend/manage.py migrate
+# Go to frontend and build React
+cd ../project
+npm install
+npm run build
 
-python backend/manage.py collectstatic --noinput
+# Back to backend
+cd ../backendApi
+
+# Django collectstatic and migrations
+python manage.py collectstatic --no-input
+python manage.py migrate
