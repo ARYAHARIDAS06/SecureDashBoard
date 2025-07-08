@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -o orrexit
+set -o errexit
 pip install -r requirements.txt
 
 echo "🧱 Running Django migrations..."
