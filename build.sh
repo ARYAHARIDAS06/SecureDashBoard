@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
 
-#!/usr/bin/env bash
+# Exit on error
 set -o errexit
 
-
-cd backend
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Go to frontend and build React
-cd ../project
+# Install frontend dependencies and build static files
+cd project
 npm install
 npm run build
+cd ..
 
-# Back to backend
-cd ../backendApi
-
-# Django collectstatic and migrations
+# Collect static files for Django (make sure STATIC_ROOT is set in settings.py)
 python manage.py collectstatic --no-input
+
+# Run migrations (optional, for db setup)
 python manage.py migrate
