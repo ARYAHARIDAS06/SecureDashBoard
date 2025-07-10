@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth';
+import api from '../utils/axios'; // Update the path if necessary
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const AuthForm: React.FC = () => {

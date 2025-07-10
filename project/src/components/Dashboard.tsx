@@ -1,56 +1,55 @@
-// src/components/Dashboard.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Phone, Users, History, Menu, X } from 'lucide-react';
 import ContactTable from './ContactTable';
 import WebDialer from './WebDialer';
 import CallHistory from './CallHistory';
-import axios from 'axios';
+import api from '../utils/axios'; // Use the configured axios instance
 import type { Contact, CallLog, CallStatus } from '../types';
 
 const statusMap: Record<string, CallStatus['status']> = {
-  queued:       'dialing',
-  ringing:      'ringing',
-  'in-progress':'connected',
-  completed:    'ended',
-  failed:       'ended',
-  busy:         'ended',
-  'no-answer':  'ended',
+  queued: 'dialing',
+  ringing: 'ringing',
+  'in-progress': 'connected',
+  completed: 'ended',
+  failed: 'ended',
+  busy: 'ended',
+  'no-answer': 'ended',
 };
 
 const Dashboard: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [callHistory, setCallHistory] = useState<CallLog[]>([]);
   const [callStatus, setCallStatus] = useState<CallStatus>({ isActive: false, status: 'idle' });
-  const [activeTab, setActiveTab] = useState<'contacts'|'dialer'|'history'>('contacts');
+  const [activeTab, setActiveTab] = useState<'contacts' | 'dialer' | 'history'>('contacts');
   const [mobileMenu, setMobileMenu] = useState(false);
 
   const statusInterval = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    axios.get<Contact[]>('http://localhost:8000/api/contacts/')
-      .then(resp => {
+    api.get<Contact[]>('contacts/')
+      .then((resp: { data: any[]; }) => {
         setContacts(resp.data.map(c => ({
-          id:           c.id,
-          name:         c.name,
-          phone:        c.phone,
-          email:        c.email,
-          notes:        c.notes,
-          lastContacted:c.lastContacted,
-          tags:         c.tags || []
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          email: c.email,
+          notes: c.notes,
+          lastContacted: c.lastContacted,
+          tags: c.tags || []
         })));
       })
       .catch(console.error);
 
-    axios.get<{ calls: any[] }>('http://localhost:8000/api/calls/')
-      .then(resp => {
+    api.get<{ calls: any[] }>('calls/')
+      .then((resp: { data: { calls: { map: (arg0: (c: any, i: any) => { id: any; contactName: any; phone: any; type: string; duration: number; timestamp: Date; status: any; }) => React.SetStateAction<CallLog[]>; }; }; }) => {
         setCallHistory(resp.data.calls.map((c, i) => ({
-          id:           i.toString(),
-          contactName:  c.from || 'Unknown',
-          phone:        c.to,
-          type:         c.direction === 'inbound' ? 'incoming' : 'outgoing',
-          duration:     parseInt(c.duration) || 0,
-          timestamp:    new Date(c.start_time),
-          status:       c.status,
+          id: i.toString(),
+          contactName: c.from || 'Unknown',
+          phone: c.to,
+          type: c.direction === 'inbound' ? 'incoming' : 'outgoing',
+          duration: parseInt(c.duration) || 0,
+          timestamp: new Date(c.start_time),
+          status: c.status,
         })));
       })
       .catch(console.error);
@@ -65,18 +64,18 @@ const Dashboard: React.FC = () => {
   const handleCall = async (phone: string, contactName?: string) => {
     setCallStatus({
       isActive: true,
-      status:   'dialing',
+      status: 'dialing',
       currentCall: {
         phone,
         contactName: contactName || 'Unknown',
-        startTime:   new Date(),
-        duration:    0,
-        sid:         undefined
+        startTime: new Date(),
+        duration: 0,
+        sid: undefined
       }
     });
 
     try {
-      const resp = await axios.post('http://localhost:8000/api/call/', { to: phone });
+      const resp = await api.post('call/', { to: phone });
       const sid = resp.data.sid as string;
 
       setCallStatus(cs => ({
@@ -86,7 +85,7 @@ const Dashboard: React.FC = () => {
 
       statusInterval.current = setInterval(async () => {
         try {
-          const st = await axios.get<{ status: string }>(`http://localhost:8000/api/call/status/?sid=${sid}`);
+          const st = await api.get<{ status: string }>(`call/status/?sid=${sid}`);
           const twStatus = st.data.status;
           const uiStatus = statusMap[twStatus] || 'dialing';
 
@@ -101,13 +100,13 @@ const Dashboard: React.FC = () => {
             const cc = callStatus.currentCall!;
             setCallHistory(ch => [
               {
-                id:          Date.now().toString(),
+                id: Date.now().toString(),
                 contactName: cc.contactName,
-                phone:       cc.phone,
-                type:        'outgoing',
-                duration:    cc.duration,
-                timestamp:   new Date(),
-                status:      'completed'
+                phone: cc.phone,
+                type: 'outgoing',
+                duration: cc.duration,
+                timestamp: new Date(),
+                status: 'completed'
               },
               ...ch
             ]);
@@ -138,13 +137,12 @@ const Dashboard: React.FC = () => {
     }
 
     try {
-      await axios.post('http://localhost:8000/api/end_call/', { call_sid: sid });
+      await api.post('end_call/', { call_sid: sid });
     } catch (e) {
       console.error('Hangup failed', e);
     } finally {
       setCallStatus({ isActive: false, status: 'idle' });
 
-      // Optionally disconnect Twilio Device if using
       if (window.Twilio?.Device?.disconnectAll) {
         window.Twilio.Device.disconnectAll();
       }
@@ -178,9 +176,9 @@ const Dashboard: React.FC = () => {
   };
 
   const nav = [
-    { id:'contacts', label:'Contacts', icon:Users },
-    { id:'dialer',    label:'Dialer',   icon:Phone },
-    { id:'history',   label:'History',  icon:History }
+    { id: 'contacts', label: 'Contacts', icon: Users },
+    { id: 'dialer', label: 'Dialer', icon: Phone },
+    { id: 'history', label: 'History', icon: History }
   ];
 
   return (
@@ -188,7 +186,7 @@ const Dashboard: React.FC = () => {
       {mobileMenu && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 lg:hidden">
           <div className="w-64 bg-white h-full shadow p-4">
-            <button onClick={()=>setMobileMenu(false)} className="mb-4"><X/></button>
+            <button onClick={() => setMobileMenu(false)} className="mb-4"><X /></button>
             {nav.map(n => {
               const Icon = n.icon;
               return (
@@ -196,10 +194,10 @@ const Dashboard: React.FC = () => {
                   key={n.id}
                   onClick={() => { setActiveTab(n.id as any); setMobileMenu(false); }}
                   className={`flex items-center gap-2 p-2 rounded w-full ${
-                    activeTab===n.id?'bg-blue-100 text-blue-700':'hover:bg-gray-100'
+                    activeTab === n.id ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'
                   }`}
                 >
-                  <Icon/> {n.label}
+                  <Icon /> {n.label}
                 </button>
               );
             })}
@@ -217,10 +215,10 @@ const Dashboard: React.FC = () => {
                 key={n.id}
                 onClick={() => setActiveTab(n.id as any)}
                 className={`flex items-center gap-2 p-2 rounded w-full mb-2 ${
-                  activeTab===n.id?'bg-blue-100 text-blue-700':'hover:bg-gray-100'
+                  activeTab === n.id ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'
                 }`}
               >
-                <Icon/> {n.label}
+                <Icon /> {n.label}
               </button>
             );
           })}
@@ -229,7 +227,7 @@ const Dashboard: React.FC = () => {
 
       <div className="lg:pl-64">
         <div className="sticky top-0 bg-white shadow p-4 flex justify-between items-center">
-          <button className="lg:hidden" onClick={()=>setMobileMenu(true)}><Menu/></button>
+          <button className="lg:hidden" onClick={() => setMobileMenu(true)}><Menu /></button>
           <h2 className="text-xl font-semibold capitalize">{activeTab}</h2>
           {callStatus.isActive && (
             <button onClick={handleEndCall} className="bg-red-600 text-white px-3 py-1 rounded">
