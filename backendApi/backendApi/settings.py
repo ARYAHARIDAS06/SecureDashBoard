@@ -77,10 +77,9 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backendApi.wsgi.application'
 
 
-# WebAuthn Configuration
-WEBAUTHN_RP_ID = 'localhost'  # Change to your domain in production
-WEBAUTHN_RP_NAME = 'Secure DashBoard'
-WEBAUTHN_ORIGIN = 'http://localhost:5173'  # Change to your origin in production
+WEBAUTHN_RP_ID = "localhost"
+WEBAUTHN_RP_NAME = "Secure DashBoard"
+WEBAUTHN_ORIGIN = "http://localhost:5173"  # Change to your origin in production
 # Database
 DATABASES = {
     'default': {

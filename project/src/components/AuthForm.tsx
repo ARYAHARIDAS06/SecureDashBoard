@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const AuthForm: React.FC = () => {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
+  const location = useLocation();
+  const [isLogin, setIsLogin] = useState(location.pathname === '/login');
   const { login } = useAuth();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isWebAuthnAvailable, setIsWebAuthnAvailable] = useState(false);
+  const navigate = useNavigate();
 
-  // Check WebAuthn availability on component mount
   useEffect(() => {
     const checkWebAuthnSupport = () => {
       const isSupported = 
@@ -24,7 +26,6 @@ const AuthForm: React.FC = () => {
     checkWebAuthnSupport();
   }, []);
 
-  // Utility functions for encoding/decoding
   const bufferToBase64URL = (buffer: ArrayBuffer): string => {
     const bytes = new Uint8Array(buffer);
     return btoa(String.fromCharCode(...bytes))
@@ -56,6 +57,7 @@ const AuthForm: React.FC = () => {
         'http://localhost:8000/api/auth/passkeys/register/begin/', 
         { email }
       );
+      console.log('Registration options from server:', optionsResponse.data);
 
       // 2. Prepare public key options for browser
       const publicKey = {
@@ -64,8 +66,10 @@ const AuthForm: React.FC = () => {
         user: {
           ...optionsResponse.data.user,
           id: base64URLToBuffer(optionsResponse.data.user.id),
-        }
+        },
+        excludeCredentials: []
       };
+      console.log('Public key options for navigator.credentials.create:', publicKey);
 
       // 3. Create credential using browser WebAuthn API
       const credential = await navigator.credentials.create({
@@ -88,6 +92,7 @@ const AuthForm: React.FC = () => {
           clientDataJSON: bufferToBase64URL(response.clientDataJSON)
         }
       };
+      console.log('Registration data sent to server:', registrationData);
 
       // 5. Send to server for verification
       const completeResponse = await axios.post(
@@ -97,12 +102,21 @@ const AuthForm: React.FC = () => {
           credential: registrationData 
         }
       );
+      console.log('Server response for registration complete:', completeResponse.data);
 
       if (completeResponse.data?.token) {
-        login(completeResponse.data.user);
+        login({ ...completeResponse.data.user, token: completeResponse.data.token }); // Pass user and token
+        navigate('/login'); // Redirect to login after successful registration
       }
     } catch (err: any) {
       console.error("Registration Error:", err);
+      console.log('Error details:', {
+        message: err.message,
+        name: err.name,
+        code: err.code,
+        response: err.response?.data,
+        request: err.request
+      });
       let errorMessage = "Registration failed";
       
       if (err.name === 'NotAllowedError') {
@@ -124,26 +138,25 @@ const AuthForm: React.FC = () => {
       setIsLoading(true);
       setError('');
 
-      // 1. Get authentication options from server
       const optionsResponse = await axios.post(
         'http://localhost:8000/api/auth/passkeys/login/begin/',
         { email }
       );
+      console.log('Authentication options from server:', optionsResponse.data);
       
       const options = optionsResponse.data;
 
-      // 2. Prepare public key options for browser
       const publicKey = {
         challenge: base64URLToBuffer(options.challenge),
         rpId: options.rpId,
-        allowCredentials: options.allowCredentials?.map((cred: any) => ({
+        allowCredentials: options.allowCredentials.map((cred: any) => ({
           id: base64URLToBuffer(cred.id),
           type: 'public-key'
-        })) || [],
+        })),
         userVerification: 'required'
       };
+      console.log('Public key options for navigator.credentials.get:', publicKey);
 
-      // 3. Get assertion from authenticator
       const credential = await navigator.credentials.get({ publicKey });
       if (!credential) {
         throw new Error("No credential received from authenticator");
@@ -152,7 +165,6 @@ const AuthForm: React.FC = () => {
       const assertion = credential as PublicKeyCredential;
       const response = assertion.response as AuthenticatorAssertionResponse;
       
-      // 4. Prepare authentication data for server verification
       const assertionData = {
         id: assertion.id,
         rawId: bufferToBase64URL(assertion.rawId),
@@ -166,18 +178,27 @@ const AuthForm: React.FC = () => {
             : undefined
         }
       };
+      console.log('Authentication data sent to server:', assertionData);
 
-      // 5. Verify with server
       const verifyResponse = await axios.post(
         'http://localhost:8000/api/auth/passkeys/login/complete/',
         { credential: assertionData }
       );
+      console.log('Server response for authentication complete:', verifyResponse.data);
 
       if (verifyResponse.data?.token) {
-        login(verifyResponse.data.user);
+        login({ ...verifyResponse.data.user, token: verifyResponse.data.token }); // Pass user and token
+        navigate('/'); // Redirect to dashboard after successful login
       }
     } catch (err: any) {
       console.error("Authentication Error:", err);
+      console.log('Error details:', {
+        message: err.message,
+        name: err.name,
+        code: err.code,
+        response: err.response?.data,
+        request: err.request
+      });
       let errorMessage = "Authentication failed";
       
       if (err.name === 'NotAllowedError') {
@@ -281,7 +302,10 @@ const AuthForm: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={() => {
+              setIsLogin(!isLogin);
+              navigate(isLogin ? '/register' : '/login');
+            }}
             className="text-blue-500 w-full text-center text-sm hover:underline"
             disabled={isLoading}
           >

@@ -1,4 +1,3 @@
-// import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import AuthForm from './components/AuthForm';
@@ -15,7 +14,9 @@ const App = () => (
     <Router>
       <Routes>
         <Route path="/login" element={<AuthForm />} />
+        <Route path="/register" element={<AuthForm />} />
         <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="*" element={<Navigate to="/login" replace />} /> {/* Redirect unknown routes to /login */}
       </Routes>
     </Router>
   </AuthProvider>
