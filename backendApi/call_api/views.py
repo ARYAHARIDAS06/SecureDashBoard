@@ -13,7 +13,7 @@ from dateutil.parser import parse as parse_datetime
 import logging
 
 ACCOUNT_SID = "ACdc68d30744cecc94bdc2a335ab19301b"
-AUTH_TOKEN = "be9b9e85b21a0d144b73ad3c74e10812"
+AUTH_TOKEN = "d328fe96756b5e7a76298ae0bd4374ae"
 TWILIO_NUMBER = "+19153363542"
 OUTGOING_APP_SID = "APd2496d1d554649dffa6b8a409d65eda3"
 

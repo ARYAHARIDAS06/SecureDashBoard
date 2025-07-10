@@ -13,7 +13,7 @@ DEBUG = True
 ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
-    '54ea-103-154-37-6.ngrok-free.app',  # optional ngrok URL
+    'b22432c439b2.ngrok-free.app',  # optional ngrok URL
 ]
 
 # Application definition
@@ -51,11 +51,10 @@ ROOT_URLCONF = 'backendApi.urls'
 # REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
+        #'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.TokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
     ],
 }
 TEMPLATES = [
@@ -116,7 +115,7 @@ AUTH_USER_MODEL = 'authentication.User'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5174", 
      "http://localhost:5173",  # React dev server
-    "https://54ea-103-154-37-6.ngrok-free.app",  # Optional ngrok
+    "https://b22432c439b2.ngrok-free.app",  # Optional ngrok
 ]
 CORS_ALLOW_CREDENTIALS = True
 
