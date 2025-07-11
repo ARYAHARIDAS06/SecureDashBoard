@@ -15,7 +15,7 @@ urlpatterns = [
     path('api/calls/', call_logs),
     path('api/end_call/', end_call),
     path('api/call/status/', call_status),
-    path('api/incoming/', incoming_call),
-    path('api/ge/', get_twilio_token),
+    path('api/incoming/', incoming_call),  # Ensure this matches Twilio configuration
+    path('api/get_twilio_token/', get_twilio_token),  # Corrected path name
     path('api/voice/', outbound_call_twiml),
 ]

@@ -1,5 +1,3 @@
-
-
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
@@ -11,12 +9,16 @@ from twilio.jwt.access_token.grants import VoiceGrant
 from .models import CallLog
 from dateutil.parser import parse as parse_datetime
 import logging
+from django.utils import timezone
+from django.conf import settings  # Ensure settings is imported
+
+logger = logging.getLogger(__name__)
 
 ACCOUNT_SID = "ACdc68d30744cecc94bdc2a335ab19301b"
 AUTH_TOKEN = "d328fe96756b5e7a76298ae0bd4374ae"
 TWILIO_NUMBER = "+19153363542"
 OUTGOING_APP_SID = "APd2496d1d554649dffa6b8a409d65eda3"
-
+NGROK_URL = " https://a26395bc65e8.ngrok-free.app"  # Updated to match your ngrok
 
 @csrf_exempt
 @api_view(['POST'])
@@ -30,12 +32,12 @@ def make_call(request):
         call = client.calls.create(
             from_=TWILIO_NUMBER,
             to=to_number,
-            url=f"https://your-ngrok-url.ngrok.io/api/voice/?To={to_number}"  # update with your ngrok
+            url=f"{NGROK_URL}/api/voice/?To={to_number}"
         )
         return Response({"sid": call.sid, "status": "initiated"})
     except Exception as e:
+        logger.exception("Error in make_call: %s", str(e))
         return Response({"error": str(e)}, status=500)
-
 
 @api_view(['GET'])
 def call_logs(request):
@@ -46,14 +48,18 @@ def call_logs(request):
         for call in calls:
             start_time = getattr(call, "start_time", None)
             parsed_time = parse_datetime(str(start_time)) if start_time else None
-            CallLog.objects.create(
-                from_number=getattr(call, "_from", None),
-                to_number=getattr(call, "to", None),
-                status=getattr(call, "status", None),
-                start_time=parsed_time,
-                duration=int(call.duration) if call.duration else None,
-                direction=getattr(call, "direction", None),
-            )
+            # Check if call already exists to avoid duplicates
+            if not CallLog.objects.filter(sid=getattr(call, "sid", None)).exists():
+                CallLog.objects.create(
+                    sid=getattr(call, "sid", None),
+                    from_number=getattr(call, "_from", None),
+                    to_number=getattr(call, "to", None),
+                    status=getattr(call, "status", None),
+                    start_time=parsed_time,
+                    duration=int(call.duration) if call.duration else None,
+                    direction=getattr(call, "direction", None),
+                    user=request.user if request.user.is_authenticated else None,  # Use authenticated user
+                )
             call_data.append({
                 "from": getattr(call, "_from", None),
                 "to": getattr(call, "to", None),
@@ -64,9 +70,8 @@ def call_logs(request):
             })
         return Response({"calls": call_data})
     except Exception as e:
-        logging.exception("Error fetching or saving call logs")
+        logger.exception("Error fetching or saving call logs")
         return Response({"error": str(e)}, status=500)
-
 
 @api_view(['POST'])
 def end_call(request):
@@ -76,22 +81,13 @@ def end_call(request):
     try:
         client = Client(ACCOUNT_SID, AUTH_TOKEN)
         call = client.calls(call_sid).update(status='completed')
+        # Update CallLog status if exists
+        CallLog.objects.filter(sid=call_sid).update(status='completed')
         return Response({'status': 'Call ended', 'call_sid': call.sid})
     except Exception as e:
+        logger.exception("Error in end_call: %s", str(e))
         return Response({'error': str(e)}, status=500)
 
-
-# @api_view(['GET'])
-# def call_status(request):
-#     sid = request.query_params.get('sid')
-#     if not sid:
-#         return Response({"error": "sid is required"}, status=400)
-#     try:
-#         client = Client(ACCOUNT_SID, AUTH_TOKEN)
-#         call = client.calls(sid).fetch()
-#         return Response({"status": call.status})
-#     except Exception as e:
-#         return Response({"error": str(e)}, status=500})
 @api_view(['GET'])
 def call_status(request):
     sid = request.query_params.get('sid')
@@ -103,20 +99,46 @@ def call_status(request):
         call = client.calls(sid).fetch()
         return Response({"status": call.status})
     except Exception as e:
+        logger.exception("Error in call_status: %s", str(e))
         return Response({"error": str(e)}, status=500)
 
 @csrf_exempt
 def incoming_call(request):
-    from_number = request.POST.get('_from') or request.GET.get('_from')
-    to_number = request.POST.get('to') or request.GET.get('to')
-    call_sid = request.POST.get('call_sid') or request.GET.get('call_sid')
-    print(f'📞 Incoming call from {from_number} to {to_number} (SID: {call_sid})')
+    from_number = request.POST.get('From')
+    to_number = request.POST.get('To')
+    call_sid = request.POST.get('CallSid')
+    logger.info(f'📞 Incoming call from {from_number} to {to_number} (SID: {call_sid})')
 
     response = VoiceResponse()
-    response.say("You have an incoming call from your dashboard app.", voice="alice")
-    response.dial().client("web-client")  # same identity from token
-    return HttpResponse(str(response), content_type='application/xml')
+    if not from_number or not to_number:
+        response.say("Invalid call data.", voice="alice")
+        return HttpResponse(str(response), content_type='application/xml')
 
+    try:
+        # Log the incoming call immediately
+        call_log, created = CallLog.objects.get_or_create(
+            sid=call_sid,
+            defaults={
+                'from_number': from_number,
+                'to_number': to_number,
+                'status': 'ringing',
+                'start_time': timezone.now(),
+                'direction': 'incoming',
+                'user': request.user if hasattr(request, 'user') and request.user.is_authenticated else None,
+            }
+        )
+        if not created:
+            call_log.status = 'ringing'
+            call_log.start_time = timezone.now()
+            call_log.save()
+
+        response.say("Connecting your call...", voice="alice")
+        response.dial().client("web-client")
+        return HttpResponse(str(response), content_type='application/xml')
+    except Exception as e:
+        logger.exception("Error in incoming_call: %s", str(e))
+        response.say("An error occurred. Please try again.", voice="alice")
+        return HttpResponse(str(response), content_type='application/xml')
 
 @api_view(['GET'])
 def get_twilio_token(request):
@@ -127,7 +149,6 @@ def get_twilio_token(request):
     voice_grant = VoiceGrant(outgoing_application_sid=OUTGOING_APP_SID, incoming_allow=True)
     token.add_grant(voice_grant)
     return JsonResponse({'token': str(token)})
-
 
 @csrf_exempt
 def outbound_call_twiml(request):

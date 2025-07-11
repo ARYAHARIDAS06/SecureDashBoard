@@ -1,4 +1,3 @@
-// src/components/IncomingCallModal.tsx
 import React from 'react';
 
 interface Props {

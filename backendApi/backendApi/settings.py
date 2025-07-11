@@ -13,7 +13,7 @@ DEBUG = True
 ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
-    'b22432c439b2.ngrok-free.app',  # optional ngrok URL
+    ' a26395bc65e8.ngrok-free.app',  # optional ngrok URL
 ]
 
 # Application definition
@@ -115,7 +115,7 @@ AUTH_USER_MODEL = 'authentication.User'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5174", 
      "http://localhost:5173",  # React dev server
-    "https://b22432c439b2.ngrok-free.app",  # Optional ngrok
+    " https://a26395bc65e8.ngrok-free.app",  # Optional ngrok
 ]
 CORS_ALLOW_CREDENTIALS = True
 
