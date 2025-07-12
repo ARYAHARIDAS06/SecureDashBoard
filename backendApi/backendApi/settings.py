@@ -1,16 +1,21 @@
+import dj_database_url
 from pathlib import Path
 from datetime import timedelta
+import os
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 AUTH_USER_MODEL = 'authentication.User'
 SECRET_KEY = 'django-insecure-zg29+ulxyvzrb1feax$xvv9g6pb#n^39f8l*x@-egj*sf55(o4'
-DEBUG = True
+#DEBUG = True
 
-ALLOWED_HOSTS = [
-    '127.0.0.1',
-    'localhost',
-    'a26395bc65e8.ngrok-free.app',  # Removed extra space
-]
+DEBUG = os.getenv('DEBUG', 'False').lower == 'true'
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost').split(',')
+# ALLOWED_HOSTS = [
+#     '127.0.0.1',
+#     'localhost',
+#     'a26395bc65e8.ngrok-free.app',  # Removed extra space
+# ]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -78,17 +83,25 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backendApi.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'SecureDashBoard',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': '5434'
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'SecureDashBoard',
+#         'USER': 'postgres',
+#         'PASSWORD': '1234',
+#         'HOST': 'localhost',
+#         'PORT': '5434'
+#     }
+# }
 
+
+DATABASES = {
+    'default': dj_database_url.config(
+        default='postgresql://securedashboard_user:AwtEWm6IEP8z0SS2IzWqWTz04ylfsEhQ@dpg-d1pafrvfte5s73c5e9ug-a.oregon-postgres.render.com/securedashboard',
+        conn_max_age=600
+    )
+}
+#postgresql://securedashboard_user:AwtEWm6IEP8z0SS2IzWqWTz04ylfsEhQ@dpg-d1pafrvfte5s73c5e9ug-a.oregon-postgres.render.com/securedashboard
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
