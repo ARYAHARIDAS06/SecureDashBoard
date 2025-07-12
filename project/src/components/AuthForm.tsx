@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth';
-import api from '../utils/axios'; // Update the path if necessary
+import api from '../utils/axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const AuthForm: React.FC = () => {
@@ -53,14 +53,12 @@ const AuthForm: React.FC = () => {
       setIsLoading(true);
       setError('');
 
-      // 1. Get registration options from server
       const optionsResponse = await axios.post(
-        'http://localhost:8000/api/auth/passkeys/register/begin/', 
+        'http://localhost:8000/api/auth/passkeys/register/begin/',
         { email }
       );
       console.log('Registration options from server:', optionsResponse.data);
 
-      // 2. Prepare public key options for browser
       const publicKey = {
         ...optionsResponse.data,
         challenge: base64URLToBuffer(optionsResponse.data.challenge),
@@ -72,7 +70,6 @@ const AuthForm: React.FC = () => {
       };
       console.log('Public key options for navigator.credentials.create:', publicKey);
 
-      // 3. Create credential using browser WebAuthn API
       const credential = await navigator.credentials.create({
         publicKey
       }) as PublicKeyCredential;
@@ -83,7 +80,6 @@ const AuthForm: React.FC = () => {
 
       const response = credential.response as AuthenticatorAttestationResponse;
       
-      // 4. Prepare registration data for server verification
       const registrationData = {
         id: credential.id,
         rawId: bufferToBase64URL(credential.rawId),
@@ -95,31 +91,21 @@ const AuthForm: React.FC = () => {
       };
       console.log('Registration data sent to server:', registrationData);
 
-      // 5. Send to server for verification
-      const completeResponse = await axios.post(
-        'http://localhost:8000/api/auth/passkeys/register/complete/',
-        { 
-          email,
-          credential: registrationData 
-        }
+      const completeResponse = await api.post(
+        'auth/passkeys/register/complete/',
+        { email, credential: registrationData }
       );
       console.log('Server response for registration complete:', completeResponse.data);
 
-      if (completeResponse.data?.token) {
-        login({ ...completeResponse.data.user, token: completeResponse.data.token }); // Pass user and token
-        navigate('/login'); // Redirect to login after successful registration
+      if (completeResponse.data?.access) {
+        localStorage.setItem('access_token', completeResponse.data.access);
+        localStorage.setItem('refresh_token', completeResponse.data.refresh);
+        login({ ...completeResponse.data.user });
+        navigate('/login'); // Redirect to login after registration
       }
     } catch (err: any) {
       console.error("Registration Error:", err);
-      console.log('Error details:', {
-        message: err.message,
-        name: err.name,
-        code: err.code,
-        response: err.response?.data,
-        request: err.request
-      });
       let errorMessage = "Registration failed";
-      
       if (err.name === 'NotAllowedError') {
         errorMessage = "Registration cancelled by user";
       } else if (err.response?.data?.error) {
@@ -127,7 +113,6 @@ const AuthForm: React.FC = () => {
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -181,27 +166,21 @@ const AuthForm: React.FC = () => {
       };
       console.log('Authentication data sent to server:', assertionData);
 
-      const verifyResponse = await axios.post(
-        'http://localhost:8000/api/auth/passkeys/login/complete/',
+      const verifyResponse = await api.post(
+        'auth/passkeys/login/complete/',
         { credential: assertionData }
       );
       console.log('Server response for authentication complete:', verifyResponse.data);
 
-      if (verifyResponse.data?.token) {
-        login({ ...verifyResponse.data.user, token: verifyResponse.data.token }); // Pass user and token
-        navigate('/'); // Redirect to dashboard after successful login
+      if (verifyResponse.data?.access) {
+        localStorage.setItem('access_token', verifyResponse.data.access);
+        localStorage.setItem('refresh_token', verifyResponse.data.refresh);
+        login({ ...verifyResponse.data.user });
+        navigate('/'); // Redirect to dashboard
       }
     } catch (err: any) {
       console.error("Authentication Error:", err);
-      console.log('Error details:', {
-        message: err.message,
-        name: err.name,
-        code: err.code,
-        response: err.response?.data,
-        request: err.request
-      });
       let errorMessage = "Authentication failed";
-      
       if (err.name === 'NotAllowedError') {
         errorMessage = "Authentication cancelled by user";
       } else if (err.response?.data?.error) {
@@ -209,7 +188,6 @@ const AuthForm: React.FC = () => {
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
       setError(errorMessage);
     } finally {
       setIsLoading(false);

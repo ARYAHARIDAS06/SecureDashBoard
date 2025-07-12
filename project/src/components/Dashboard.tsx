@@ -1,4 +1,3 @@
-// In Dashboard.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Phone, Users, History, Menu, X } from 'lucide-react';
 import ContactTable from './ContactTable';
@@ -7,6 +6,7 @@ import CallHistory from './CallHistory';
 import IncomingCallModal from './IncomingCallModal';
 import api from '../utils/axios';
 import type { Contact, CallLog, CallStatus } from '../types';
+import { useNavigate } from 'react-router-dom';
 
 const statusMap: Record<string, CallStatus['status']> = {
   queued: 'dialing',
@@ -19,6 +19,7 @@ const statusMap: Record<string, CallStatus['status']> = {
 };
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [callHistory, setCallHistory] = useState<CallLog[]>([]);
   const [callStatus, setCallStatus] = useState<CallStatus>({ isActive: false, status: 'idle' });
@@ -30,8 +31,14 @@ const Dashboard: React.FC = () => {
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
     api.get<Contact[]>('contacts/')
-      .then((resp) => setContacts(resp.data.map(c => ({
+      .then((resp: { data: any[]; }) => setContacts(resp.data.map((c: { id: any; name: any; phone: any; email: any; notes: any; lastContacted: any; tags: any; }) => ({
         id: c.id,
         name: c.name,
         phone: c.phone,
@@ -40,10 +47,16 @@ const Dashboard: React.FC = () => {
         lastContacted: c.lastContacted,
         tags: c.tags || []
       }))))
-      .catch(console.error);
+      .catch((error: { response: { status: number; }; }) => {
+        if (error.response?.status === 401) {
+          navigate('/login');
+        } else {
+          console.error('Error fetching contacts', error);
+        }
+      });
 
     api.get<{ calls: any[] }>('calls/')
-      .then((resp) => setCallHistory(resp.data.calls.map((c, i) => ({
+      .then((resp: { data: { calls: { map: (arg0: (c: any, i: any) => { id: any; contactName: any; phone: any; type: string; duration: number; timestamp: Date; status: any; }) => React.SetStateAction<CallLog[]>; }; }; }) => setCallHistory(resp.data.calls.map((c: { from: any; to: any; direction: string; duration: string; start_time: string | number | Date; status: any; }, i: { toString: () => any; }) => ({
         id: i.toString(),
         contactName: c.from || 'Unknown',
         phone: c.to,
@@ -52,8 +65,14 @@ const Dashboard: React.FC = () => {
         timestamp: new Date(c.start_time),
         status: c.status,
       }))))
-      .catch(console.error);
-  }, []);
+      .catch((error: { response: { status: number; }; }) => {
+        if (error.response?.status === 401) {
+          navigate('/login');
+        } else {
+          console.error('Error fetching call logs', error);
+        }
+      });
+  }, [navigate]);
 
   useEffect(() => {
     return () => {
