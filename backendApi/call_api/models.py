@@ -2,10 +2,10 @@ from django.db import models
 from django.conf import settings
 
 class CallLog(models.Model):
-    sid = models.CharField(max_length=34, unique=True, null=True, blank=True)  # Twilio call SID
+    sid = models.CharField(max_length=34, unique=True, null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
-    from_number = models.CharField(max_length=15, null=True)
-    to_number = models.CharField(max_length=15, null=True)
+    from_number = models.CharField(max_length=20, null=True)  # Increased from 15
+    to_number = models.CharField(max_length=20, null=True)    # Increased from 15
     status = models.CharField(max_length=20, null=True)
     start_time = models.DateTimeField(null=True)
     duration = models.IntegerField(null=True)

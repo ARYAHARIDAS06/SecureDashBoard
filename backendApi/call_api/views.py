@@ -10,15 +10,15 @@ from .models import CallLog
 from dateutil.parser import parse as parse_datetime
 import logging
 from django.utils import timezone
-from django.conf import settings  # Ensure settings is imported
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 ACCOUNT_SID = "ACdc68d30744cecc94bdc2a335ab19301b"
-AUTH_TOKEN = "d328fe96756b5e7a76298ae0bd4374ae"
+AUTH_TOKEN = "4f89a265b8385cf4b004ec3db0f63928"
 TWILIO_NUMBER = "+19153363542"
 OUTGOING_APP_SID = "APd2496d1d554649dffa6b8a409d65eda3"
-NGROK_URL = " https://a26395bc65e8.ngrok-free.app"  # Updated to match your ngrok
+NGROK_URL = "https://a26395bc65e8.ngrok-free.app"  # Removed extra space
 
 @csrf_exempt
 @api_view(['POST'])
@@ -32,7 +32,8 @@ def make_call(request):
         call = client.calls.create(
             from_=TWILIO_NUMBER,
             to=to_number,
-            url=f"{NGROK_URL}/api/voice/?To={to_number}"
+            url=f"{NGROK_URL}/api/voice/",  # Use the incoming_call endpoint directly
+            method="POST"  # Ensure POST method for TwiML
         )
         return Response({"sid": call.sid, "status": "initiated"})
     except Exception as e:
@@ -48,7 +49,6 @@ def call_logs(request):
         for call in calls:
             start_time = getattr(call, "start_time", None)
             parsed_time = parse_datetime(str(start_time)) if start_time else None
-            # Check if call already exists to avoid duplicates
             if not CallLog.objects.filter(sid=getattr(call, "sid", None)).exists():
                 CallLog.objects.create(
                     sid=getattr(call, "sid", None),
@@ -58,7 +58,7 @@ def call_logs(request):
                     start_time=parsed_time,
                     duration=int(call.duration) if call.duration else None,
                     direction=getattr(call, "direction", None),
-                    user=request.user if request.user.is_authenticated else None,  # Use authenticated user
+                    user=request.user if request.user.is_authenticated else None,
                 )
             call_data.append({
                 "from": getattr(call, "_from", None),
@@ -81,7 +81,6 @@ def end_call(request):
     try:
         client = Client(ACCOUNT_SID, AUTH_TOKEN)
         call = client.calls(call_sid).update(status='completed')
-        # Update CallLog status if exists
         CallLog.objects.filter(sid=call_sid).update(status='completed')
         return Response({'status': 'Call ended', 'call_sid': call.sid})
     except Exception as e:
@@ -115,7 +114,6 @@ def incoming_call(request):
         return HttpResponse(str(response), content_type='application/xml')
 
     try:
-        # Log the incoming call immediately
         call_log, created = CallLog.objects.get_or_create(
             sid=call_sid,
             defaults={
@@ -152,7 +150,7 @@ def get_twilio_token(request):
 
 @csrf_exempt
 def outbound_call_twiml(request):
-    to_number = request.GET.get("To") or request.POST.get("To")
+    to_number = request.POST.get("To")  # Use POST data as per Twilio's call creation
     response = VoiceResponse()
     if to_number:
         dial = response.dial(callerId=TWILIO_NUMBER)

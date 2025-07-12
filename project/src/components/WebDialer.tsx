@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { Phone, PhoneOff, Backpack as Backspace, Volume2, Mic, MicOff } from 'lucide-react';
-import type { CallStatus } from '../types';
+import type { CallLog, CallStatus } from '../types';
 
 interface WebDialerProps {
   callStatus: CallStatus;
   onCall: (phone: string, contactName?: string) => void;
   onEndCall: () => void;
+  callHistory: CallLog[];
 }
 
-const WebDialer: React.FC<WebDialerProps> = ({ callStatus, onCall, onEndCall }) => {
+const WebDialer: React.FC<WebDialerProps> = ({ callStatus, onCall, onEndCall, callHistory }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(75);
@@ -68,6 +69,14 @@ const WebDialer: React.FC<WebDialerProps> = ({ callStatus, onCall, onEndCall }) 
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Get the most recent unique phone numbers (limit to 3)
+  const recentCalls = Array.from(
+    new Map(callHistory
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) // Sort by timestamp descending
+      .map(call => [call.phone, call]))
+      .values()
+    ).slice(0, 3); // Limit to 3 recent unique calls
 
   return (
     <div className="max-w-md mx-auto">
@@ -186,20 +195,24 @@ const WebDialer: React.FC<WebDialerProps> = ({ callStatus, onCall, onEndCall }) 
           )}
         </div>
 
-        {/* Recents */}
+        {/* Recents - Dynamic */}
         {!callStatus.isActive && phoneNumber.length === 0 && (
           <div className="mt-6 pt-6 border-t border-gray-200">
             <h4 className="text-sm font-medium text-gray-900 mb-3">Recent</h4>
             <div className="space-y-2">
-              {['+919876543210', '+447911123456', '+15551234567'].map((number, index) => (
-                <button
-                  key={index}
-                  onClick={() => setPhoneNumber(number)}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
-                >
-                  {number}
-                </button>
-              ))}
+              {recentCalls.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center">No recent calls.</p>
+              ) : (
+                recentCalls.map((call, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setPhoneNumber(call.phone)}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                  >
+                    {call.phone} ({call.contactName})
+                  </button>
+                ))
+              )}
             </div>
           </div>
         )}
